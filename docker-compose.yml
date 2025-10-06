@@ -1,0 +1,69 @@
+version: '3.8'
+
+services:
+  nextjs:
+    build:
+      context: .
+      target: nextjs
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - NEXT_PUBLIC_FASTAPI_URL=http://fastapi:8000
+    depends_on:
+      - fastapi
+    networks:
+      - app-network
+
+  fastapi:
+    build:
+      context: .
+      target: fastapi
+    ports:
+      - "8000:8000" 
+    environment:
+      - DATABASE_URL=postgresql+psycopg2://simpleuser:simplepass@db:5432/simpledb
+      - PYTHONUNBUFFERED=1
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - app-network
+
+  db:
+    image: postgres:15
+    environment:
+      - POSTGRES_USER=simpleuser
+      - POSTGRES_PASSWORD=simplepass
+      - POSTGRES_DB=simpledb
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U simpleuser -d simpledb"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  seed:
+    build:
+      context: .
+      target: seed  
+    command: ["python", "-m", "api.seed"] 
+    environment:
+      - DATABASE_URL=postgresql+psycopg2://simpleuser:simplepass@db:5432/simpledb
+    depends_on:
+      - db
+      - fastapi
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge
+
+volumes:
+  postgres_data:

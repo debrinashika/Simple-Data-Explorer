@@ -51,8 +51,8 @@ export default function UsersPage() {
           params.append("age", ageFilter);
         }
 
-        const res = await fetch(`http://127.0.0.1:8000/api/users?${params}`);
-        
+        const res = await fetch(`${process.env.NEXT_PUBLIC_FASTAPI_URL}/api/users?${params}`);
+
         if (!res.ok) {
           throw new Error(`Error: ${res.status}`);
         }
