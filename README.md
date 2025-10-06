@@ -1,5 +1,7 @@
 # Simple Data Explorer
 
+![Web UI](img/image.png)
+
 A full-stack project using **Next.js** for the frontend, **FastAPI** for the backend, and **PostgreSQL** as the database.   Docker is used for easy setup and consistent development environment.
 
 ---

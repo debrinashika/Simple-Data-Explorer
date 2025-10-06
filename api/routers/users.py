@@ -1,10 +1,14 @@
 from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.orm import Session
 from typing import Optional
-from api.models.user import User, UserDB
+from api.models.user import UserDB
 from api.db import SessionLocal
+import time
 
 router = APIRouter()
+
+cache = {}
+CACHE_TTL = 30
 
 def get_db():
     db = SessionLocal()
@@ -13,7 +17,6 @@ def get_db():
     finally:
         db.close()
 
-
 @router.get("/users")
 def get_users(
     search: Optional[str] = Query(None),
@@ -21,12 +24,20 @@ def get_users(
     order: str = Query("asc"),
     page: int = Query(1, ge=1),
     limit: int = Query(10, ge=1, le=100),
-    age: Optional[str] = Query(None),  
+    age: Optional[str] = Query(None),
     db: Session = Depends(get_db)
 ):
+  
+    cache_key = f"{search}-{sort_by}-{order}-{page}-{limit}-{age}"
+    
+    if cache_key in cache:
+        cached_data, timestamp = cache[cache_key]
+        if time.time() - timestamp < CACHE_TTL:
+            return cached_data
+
     query = db.query(UserDB)
 
-    # Search
+    # search
     if search:
         search_term = f"%{search.lower()}%"
         query = query.filter(
@@ -35,13 +46,13 @@ def get_users(
             (UserDB.email.ilike(search_term))
         )
 
-    # Age filter
+    # age filter
     if age and age != "all":
         try:
-            if "-" in age: 
+            if "-" in age:
                 min_age, max_age = age.split("-")
                 query = query.filter(UserDB.age.between(int(min_age), int(max_age)))
-            elif age.endswith("+"): 
+            elif age.endswith("+"):
                 min_age = int(age[:-1])
                 query = query.filter(UserDB.age >= min_age)
             else:
@@ -54,13 +65,10 @@ def get_users(
 
     total = query.count()
 
-    # Sort
+    # sort
     if sort_by in ["id", "username", "name", "email", "age"]:
         sort_column = getattr(UserDB, sort_by)
-        if order.lower() == "desc":
-            sort_column = sort_column.desc()
-        else:
-            sort_column = sort_column.asc()
+        sort_column = sort_column.desc() if order.lower() == "desc" else sort_column.asc()
         query = query.order_by(sort_column)
     else:
         raise HTTPException(
@@ -68,14 +76,18 @@ def get_users(
             detail="Invalid sort_by field. Allowed: id, username, name, email, age"
         )
 
-    # Pagination
+    # pagination
     offset = (page - 1) * limit
     users = query.offset(offset).limit(limit).all()
 
-    return {
+    result = {
         "data": users,
         "total": total,
         "page": page,
         "limit": limit,
         "total_pages": (total + limit - 1) // limit
     }
+
+    cache[cache_key] = (result, time.time())
+
+    return result
